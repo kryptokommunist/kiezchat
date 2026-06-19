@@ -1,0 +1,13 @@
+applications:
+  - name: kiezthropic
+    memory: 1500M
+    disk_quota: 2G
+    instances: 1
+    buildpacks:
+      - python_buildpack
+    command: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    services:
+      - rosetta-aicore
+    env:
+      AICORE_DEPLOYMENT_ID: d34c832f51430c83
+      AICORE_RESOURCE_GROUP: default

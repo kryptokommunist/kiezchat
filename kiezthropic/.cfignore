@@ -1,0 +1,8 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.DS_Store
+build_index.py
+wiki_pages
+wiki_pages_extra

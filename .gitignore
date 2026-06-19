@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+kiezthropic/faiss_index.bin
+kiezthropic/chunks.pkl
+kiezthropic/fastembed_cache/
