@@ -429,6 +429,7 @@
     const correctionSubmit = document.getElementById('correction-submit');
 
     let _pendingCorrection = null; // { question, bad_answer }
+    const conversationHistory = []; // [{role, content}, ...]
 
     function removeWelcome() {
       const w = messagesEl.querySelector('.welcome');
@@ -507,6 +508,7 @@
       sendBtn.disabled = true;
 
       appendMsg('user', text);
+      conversationHistory.push({ role: 'user', content: text });
 
       let replyEl = null;
       let rawText = '';
@@ -517,7 +519,7 @@
         const resp = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text }),
+          body: JSON.stringify({ message: text, history: conversationHistory.slice(0, -1) }),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
@@ -568,7 +570,10 @@
 
       statusEls.forEach(s => { try { s.remove(); } catch (_) {} });
 
-      if (replyEl) addCorrectButton(replyEl, text);
+      if (replyEl) {
+        addCorrectButton(replyEl, text);
+        if (rawText) conversationHistory.push({ role: 'assistant', content: rawText });
+      }
 
       sendBtn.disabled = false;
       inputEl.focus();
