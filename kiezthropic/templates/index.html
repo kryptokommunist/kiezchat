@@ -405,8 +405,9 @@
       } catch (_) {}
     }
 
-    // Load stats immediately on page load
+    // Load stats immediately on page load, then refresh every 5s
     loadStats();
+    setInterval(loadStats, 5000);
   </script>
 
   <script>
