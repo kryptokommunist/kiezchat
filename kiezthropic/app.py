@@ -11,11 +11,14 @@ from pathlib import Path
 
 import requests as req_lib
 from flask import Flask, Response, render_template, request, stream_with_context
+from werkzeug.middleware.proxy_fix import ProxyFix
 from openai import OpenAI
 
 import rag
 
 app = Flask(__name__)
+# Trust one proxy hop (Cloudflare or CF router)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 # ---------------------------------------------------------------------------
 # AI Core credentials — from VCAP_SERVICES (CF) or env vars (local)
@@ -304,7 +307,11 @@ def chat():
     if not user_message:
         return {"error": "empty message"}, 400
 
-    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    # Cloudflare sets CF-Connecting-IP; fall back to X-Forwarded-For then remote addr
+    client_ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0]
+    ).strip()
 
     def generate():
         client = get_openai_client()
