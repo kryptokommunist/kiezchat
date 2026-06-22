@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kiezthropic — Kiez Burn Wiki Chat</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -36,8 +37,7 @@
       max-width: 75%;
       padding: 0.75rem 1rem;
       border-radius: 1rem;
-      line-height: 1.5;
-      white-space: pre-wrap;
+      line-height: 1.6;
       word-break: break-word;
     }
     .msg.user {
@@ -45,6 +45,7 @@
       background: #6b3fa0;
       color: #fff;
       border-bottom-right-radius: 0.25rem;
+      white-space: pre-wrap;
     }
     .msg.assistant {
       align-self: flex-start;
@@ -52,7 +53,109 @@
       color: #f0e6ff;
       border-bottom-left-radius: 0.25rem;
     }
-    .msg.assistant.streaming { opacity: 0.85; }
+    /* markdown styles inside assistant bubbles */
+    .msg.assistant p { margin-bottom: 0.5em; }
+    .msg.assistant p:last-child { margin-bottom: 0; }
+    .msg.assistant ul, .msg.assistant ol { margin: 0.4em 0 0.4em 1.4em; }
+    .msg.assistant li { margin-bottom: 0.2em; }
+    .msg.assistant h1, .msg.assistant h2, .msg.assistant h3 {
+      color: #e0b0ff; margin: 0.6em 0 0.3em;
+    }
+    .msg.assistant strong { color: #e0b0ff; }
+    .msg.assistant a { color: #b06de0; }
+    .msg.assistant code {
+      background: #1a0a2e; padding: 0.1em 0.35em; border-radius: 0.3em;
+      font-size: 0.9em;
+    }
+    .msg.assistant pre {
+      background: #1a0a2e; padding: 0.75em; border-radius: 0.5em;
+      overflow-x: auto; margin: 0.5em 0;
+    }
+    .msg.assistant pre code { background: none; padding: 0; }
+    /* correction button */
+    .msg-wrapper { align-self: flex-start; display: flex; flex-direction: column; gap: 0.3rem; max-width: 75%; }
+    .correct-btn {
+      align-self: flex-start;
+      background: none;
+      border: 1px solid #4a2070;
+      color: #7050a0;
+      font-size: 0.72rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .correct-btn:hover { border-color: #b06de0; color: #b06de0; }
+    /* correction modal */
+    #correction-modal {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #correction-modal.open { display: flex; }
+    #correction-box {
+      background: #2d1a4e;
+      border: 1px solid #6b3fa0;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      width: min(480px, 90vw);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    #correction-box h3 { color: #e0b0ff; font-size: 1rem; }
+    #correction-box label { font-size: 0.8rem; color: #a070d0; }
+    #correction-box textarea {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid #6b3fa0;
+      background: #1a0a2e;
+      color: #f0e6ff;
+      font-size: 0.9rem;
+      resize: vertical;
+      min-height: 80px;
+      outline: none;
+    }
+    #correction-box textarea:focus { border-color: #b06de0; }
+    .modal-btns { display: flex; gap: 0.5rem; justify-content: flex-end; }
+    .modal-btns button {
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    #correction-cancel { background: #3d2060; color: #c0a0e0; }
+    #correction-submit { background: #6b3fa0; color: #fff; }
+    #correction-submit:hover { background: #8b5fc0; }
+    /* status indicator */
+    .status-line {
+      align-self: flex-start;
+      font-size: 0.8rem;
+      color: #8050b0;
+      padding: 0.2rem 0.6rem;
+      font-style: italic;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .status-line::before {
+      content: '';
+      display: inline-block;
+      width: 0.5rem; height: 0.5rem;
+      background: #8050b0;
+      border-radius: 50%;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
     #input-row {
       display: flex;
       gap: 0.5rem;
@@ -91,12 +194,104 @@
       padding: 2rem;
     }
     .welcome h2 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #b06de0; }
+
+    /* ---- side panel ---- */
+    #panel-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0.25rem 0.4rem;
+      border-radius: 0.4rem;
+      color: #a070d0;
+      margin-left: auto;
+      transition: background 0.15s;
+    }
+    #panel-toggle:hover { background: #3d2060; }
+
+    #side-panel {
+      position: fixed;
+      top: 0; right: 0;
+      height: 100dvh;
+      width: 300px;
+      background: #1e0e38;
+      border-left: 1px solid #4a2070;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      z-index: 200;
+      overflow-y: auto;
+    }
+    #side-panel.open { transform: translateX(0); }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem 0.75rem;
+      border-bottom: 1px solid #3d2060;
+    }
+    .panel-header h2 { font-size: 1rem; color: #e0b0ff; }
+    #panel-close {
+      background: none; border: none; cursor: pointer;
+      color: #7050a0; font-size: 1.1rem; padding: 0.2rem;
+    }
+    #panel-close:hover { color: #e0b0ff; }
+
+    .panel-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      padding: 1rem 1.25rem;
+    }
+    .pstat {
+      background: #2d1a4e;
+      border: 1px solid #3d2060;
+      border-radius: 0.6rem;
+      padding: 0.7rem 0.85rem;
+    }
+    .pstat-label { font-size: 0.65rem; color: #7050a0; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+    .pstat-value { font-size: 1.25rem; font-weight: 700; color: #e0b0ff; }
+
+    .panel-section { padding: 0 1.25rem 1rem; }
+    .panel-section h3 {
+      font-size: 0.78rem; color: #7050a0;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 0.6rem;
+      border-top: 1px solid #3d2060;
+      padding-top: 0.75rem;
+    }
+
+    /* mini bar chart */
+    .mini-bars { display: flex; align-items: flex-end; gap: 2px; height: 60px; margin-bottom: 0.4rem; }
+    .mini-bar { flex: 1; background: #6b3fa0; border-radius: 2px 2px 0 0; min-width: 4px; transition: background 0.15s; }
+    .mini-bar:hover { background: #b06de0; }
+
+    .panel-links { display: flex; flex-direction: column; gap: 0.4rem; padding: 0 1.25rem 1.25rem; }
+    .panel-link {
+      display: block; padding: 0.5rem 0.85rem;
+      background: #2d1a4e; border: 1px solid #3d2060;
+      border-radius: 0.5rem; color: #b06de0;
+      text-decoration: none; font-size: 0.85rem;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .panel-link:hover { border-color: #b06de0; background: #3d2060; }
+
+    #panel-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 199;
+    }
+    #panel-overlay.open { display: block; }
   </style>
 </head>
 <body>
   <header>
     <h1>🔥 Kiezthropic</h1>
     <span>Ask anything about Kiez Burn 2026</span>
+    <button id="panel-toggle" title="Stats &amp; Admin">📊</button>
   </header>
   <div id="messages">
     <div class="welcome">
@@ -108,19 +303,182 @@
     <input id="input" type="text" placeholder="Ask about Kiez Burn…" autocomplete="off" />
     <button id="send">Send</button>
   </div>
+
+  <!-- Correction modal -->
+  <div id="correction-modal">
+    <div id="correction-box">
+      <h3>Correct this answer</h3>
+      <label>What's wrong / what should it say?</label>
+      <textarea id="correction-text" placeholder="Enter the correct information…"></textarea>
+      <div class="modal-btns">
+        <button id="correction-cancel">Cancel</button>
+        <button id="correction-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+  <!-- Side panel overlay -->
+  <div id="panel-overlay"></div>
+
+  <!-- Side panel -->
+  <div id="side-panel">
+    <div class="panel-header">
+      <h2>📊 Stats</h2>
+      <button id="panel-close">✕</button>
+    </div>
+    <div class="panel-stats" id="panel-stat-grid">
+      <div class="pstat"><div class="pstat-label">Requests</div><div class="pstat-value" id="ps-reqs">…</div></div>
+      <div class="pstat"><div class="pstat-label">Visitors</div><div class="pstat-value" id="ps-ips">…</div></div>
+      <div class="pstat"><div class="pstat-label">Tokens</div><div class="pstat-value" id="ps-tok">…</div></div>
+      <div class="pstat"><div class="pstat-label">Cost</div><div class="pstat-value" id="ps-cost">…</div></div>
+    </div>
+    <div class="panel-section">
+      <h3>Requests (last 30 days)</h3>
+      <div class="mini-bars" id="ps-bars"></div>
+    </div>
+    <div class="panel-links">
+      <a class="panel-link" href="/admin" target="_blank">✏️ Review Corrections</a>
+      <a class="panel-link" href="/admin/stats" target="_blank">📈 Full Stats</a>
+    </div>
+  </div>
+
   <script>
+    // panel toggle
+    const panelToggle = document.getElementById('panel-toggle');
+    const panel = document.getElementById('side-panel');
+    const overlay = document.getElementById('panel-overlay');
+    const panelClose = document.getElementById('panel-close');
+
+    function openPanel() {
+      panel.classList.add('open');
+      overlay.classList.add('open');
+      loadStats();
+    }
+    function closePanel() {
+      panel.classList.remove('open');
+      overlay.classList.remove('open');
+    }
+    panelToggle.addEventListener('click', openPanel);
+    panelClose.addEventListener('click', closePanel);
+    overlay.addEventListener('click', closePanel);
+
+    let statsLoaded = false;
+    async function loadStats() {
+      if (statsLoaded) return;
+      try {
+        const data = await fetch('/stats.json').then(r => r.json());
+        document.getElementById('ps-reqs').textContent = data.total_requests.toLocaleString();
+        document.getElementById('ps-ips').textContent = data.unique_ips.toLocaleString();
+        document.getElementById('ps-tok').textContent = data.total_tokens >= 1000
+          ? (data.total_tokens / 1000).toFixed(1) + 'K'
+          : data.total_tokens.toString();
+        document.getElementById('ps-cost').textContent = '$' + data.total_cost.toFixed(4);
+
+        // mini bar chart
+        const bars = document.getElementById('ps-bars');
+        bars.innerHTML = '';
+        if (data.daily && data.daily.length > 0) {
+          const max = Math.max(...data.daily.map(d => d.reqs), 1);
+          data.daily.forEach(d => {
+            const bar = document.createElement('div');
+            bar.className = 'mini-bar';
+            bar.style.height = Math.max((d.reqs / max) * 56, 2) + 'px';
+            bar.title = `${d.day}: ${d.reqs} req`;
+            bars.appendChild(bar);
+          });
+        } else {
+          bars.style.display = 'none';
+        }
+        statsLoaded = true;
+      } catch (_) {}
+    }
+  </script>
+
+  <script>
+    marked.setOptions({ breaks: true, gfm: true });
+
+    // Open all links in new tab
+    const renderer = new marked.Renderer();
+    renderer.link = (href, title, text) => {
+      const t = title ? ` title="${title}"` : '';
+      return `<a href="${href}"${t} target="_blank" rel="noopener">${text}</a>`;
+    };
+    marked.setOptions({ renderer });
+
     const messagesEl = document.getElementById('messages');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send');
+    const modal = document.getElementById('correction-modal');
+    const correctionText = document.getElementById('correction-text');
+    const correctionCancel = document.getElementById('correction-cancel');
+    const correctionSubmit = document.getElementById('correction-submit');
+
+    let _pendingCorrection = null; // { question, bad_answer }
+
+    function removeWelcome() {
+      const w = messagesEl.querySelector('.welcome');
+      if (w) w.remove();
+    }
 
     function appendMsg(role, text = '') {
       const div = document.createElement('div');
       div.className = `msg ${role}`;
-      if (role === 'assistant') div.classList.add('streaming');
+      if (role === 'user') {
+        div.textContent = text;
+        removeWelcome();
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return div;
+      } else {
+        div.innerHTML = marked.parse(text);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-wrapper';
+        wrapper.appendChild(div);
+        removeWelcome();
+        messagesEl.appendChild(wrapper);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return div; // return the bubble, wrapper is accessible via div.parentElement
+      }
+    }
+
+    function addCorrectButton(replyEl, question) {
+      const btn = document.createElement('button');
+      btn.className = 'correct-btn';
+      btn.textContent = 'Correct this answer';
+      btn.addEventListener('click', () => {
+        _pendingCorrection = { question, bad_answer: (replyEl.innerText || '').trim().slice(0, 500) };
+        correctionText.value = '';
+        modal.classList.add('open');
+        correctionText.focus();
+      });
+      const wrapper = replyEl.parentElement;
+      if (wrapper && wrapper.classList.contains('msg-wrapper')) {
+        wrapper.appendChild(btn);
+      }
+    }
+
+    correctionCancel.addEventListener('click', () => modal.classList.remove('open'));
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+
+    correctionSubmit.addEventListener('click', async () => {
+      const correction = correctionText.value.trim();
+      if (!correction) return;
+      const payload = { correction, ..._pendingCorrection };
+      modal.classList.remove('open');
+      try {
+        await fetch('/correct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (_) {}
+      _pendingCorrection = null;
+    });
+
+    function appendStatus(text) {
+      removeWelcome();
+      const div = document.createElement('div');
+      div.className = 'status-line';
       div.textContent = text;
-      // Remove welcome message on first interaction
-      const welcome = messagesEl.querySelector('.welcome');
-      if (welcome) welcome.remove();
       messagesEl.appendChild(div);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       return div;
@@ -133,7 +491,11 @@
       sendBtn.disabled = true;
 
       appendMsg('user', text);
-      const replyEl = appendMsg('assistant');
+
+      let replyEl = null;
+      let rawText = '';
+      let statusEl = null;
+      const statusEls = [];
 
       try {
         const resp = await fetch('/chat', {
@@ -142,30 +504,56 @@
           body: JSON.stringify({ message: text }),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buf = '';
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
           const lines = buf.split('\n');
           buf = lines.pop();
+
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
             const payload = line.slice(6);
             if (payload === '[DONE]') break;
-            try {
-              const { text: token } = JSON.parse(payload);
-              replyEl.textContent += token;
+            let parsed;
+            try { parsed = JSON.parse(payload); } catch (_) { continue; }
+
+            if (parsed.status) {
+              if (statusEl) statusEl.remove();
+              statusEl = appendStatus(parsed.status);
+              statusEls.push(statusEl);
+            } else if (parsed.text) {
+              if (statusEl) { statusEl.remove(); statusEl = null; }
+              if (!replyEl) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'msg-wrapper';
+                replyEl = document.createElement('div');
+                replyEl.className = 'msg assistant';
+                wrapper.appendChild(replyEl);
+                removeWelcome();
+                messagesEl.appendChild(wrapper);
+              }
+              rawText += parsed.text;
+              replyEl.innerHTML = marked.parse(rawText);
               messagesEl.scrollTop = messagesEl.scrollHeight;
-            } catch (_) {}
+            }
           }
         }
       } catch (err) {
+        if (statusEl) statusEl.remove();
+        if (!replyEl) replyEl = appendMsg('assistant', '');
         replyEl.textContent = `Error: ${err.message}`;
       }
-      replyEl.classList.remove('streaming');
+
+      statusEls.forEach(s => { try { s.remove(); } catch (_) {} });
+
+      if (replyEl) addCorrectButton(replyEl, text);
+
       sendBtn.disabled = false;
       inputEl.focus();
     }

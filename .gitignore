@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+.settings
+*.session
 kiezthropic/faiss_index.bin
 kiezthropic/chunks.pkl
 kiezthropic/fastembed_cache/
