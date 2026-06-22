@@ -11,6 +11,7 @@ from pathlib import Path
 
 import requests as req_lib
 from flask import Flask, Response, render_template, request, stream_with_context
+from openai import BadRequestError
 from werkzeug.middleware.proxy_fix import ProxyFix
 from openai import OpenAI
 
@@ -335,88 +336,98 @@ def chat():
         total_prompt_tokens = 0
         total_completion_tokens = 0
 
-        # --- agentic loop ---
-        while search_count < MAX_SEARCHES:
-            response = client.chat.completions.create(
-                model=MODEL, max_tokens=1024, tools=TOOLS, tool_choice="auto", messages=messages,
+        try:
+            # --- agentic loop ---
+            while search_count < MAX_SEARCHES:
+                response = client.chat.completions.create(
+                    model=MODEL, max_tokens=1024, tools=TOOLS, tool_choice="auto", messages=messages,
+                )
+                if response.usage:
+                    total_prompt_tokens += response.usage.prompt_tokens
+                    total_completion_tokens += response.usage.completion_tokens
+
+                msg = response.choices[0].message
+                messages.append(_msg_to_dict(msg))
+
+                if not msg.tool_calls:
+                    break
+
+                for tc in msg.tool_calls:
+                    fn = tc.function.name
+                    try:
+                        args = json.loads(tc.function.arguments)
+                    except json.JSONDecodeError:
+                        args = {}
+
+                    if fn == "search":
+                        query = args.get("query", user_message)
+                        top_k = max(1, min(int(args.get("top_k", 6)), 15))
+                        yield f"data: {json.dumps({'status': f'Searching: {query}'})}\n\n"
+                        results = rag.retrieve_combined(query, top_k=top_k)
+                        messages.append({"role": "tool", "tool_call_id": tc.id,
+                                         "content": _format_search_results(results) or "No results found."})
+                        search_count += 1
+
+                    elif fn == "add_to_context":
+                        ids = [int(i) for i in args.get("ids", [])]
+                        collected_ids.update(ids)
+                        yield f"data: {json.dumps({'status': f'Loading {len(ids)} chunk(s) in full'})}\n\n"
+                        messages.append({"role": "tool", "tool_call_id": tc.id,
+                                         "content": f"Added chunk IDs {ids} to context."})
+
+            # --- build final context ---
+            context_parts = []
+            if collected_ids:
+                full_chunks = rag.get_chunks_by_ids(list(collected_ids))
+                if any("camps_list" in c.get("source", "") for c in full_chunks):
+                    camps_all = rag.retrieve_by_source("camps_list")
+                    camps_ids = {c["idx"] for c in camps_all}
+                    extra = rag.get_chunks_by_ids([i for i in camps_ids if i not in collected_ids])
+                    full_chunks = full_chunks + extra
+                for c in full_chunks:
+                    context_parts.append(f"[{c['title']}]\n{c['text']}")
+
+            full_context_block = (
+                "Full text for selected chunks:\n\n" + "\n\n---\n\n".join(context_parts) + "\n\n"
+                if context_parts else ""
             )
-            if response.usage:
-                total_prompt_tokens += response.usage.prompt_tokens
-                total_completion_tokens += response.usage.completion_tokens
+            search_history = [m for m in messages[1:] if isinstance(m, dict) and m.get("role") == "tool"]
+            snippet_block = ""
+            if search_history:
+                snippet_block = "Search result snippets from earlier:\n\n" + "\n\n".join(
+                    m["content"] for m in search_history if "ID:" in m.get("content", "")
+                ) + "\n\n"
 
-            msg = response.choices[0].message
-            messages.append(_msg_to_dict(msg))
+            final_messages = [
+                {"role": "system", "content": _build_answer_system()},
+                *history,
+                {"role": "user", "content": f"{full_context_block}{snippet_block}Question: {user_message}"},
+            ]
 
-            if not msg.tool_calls:
-                break
+            stream = client.chat.completions.create(
+                model=MODEL, max_tokens=4096, stream=True,
+                stream_options={"include_usage": True},
+                messages=final_messages,
+            )
+            for chunk in stream:
+                if chunk.usage:
+                    total_prompt_tokens += chunk.usage.prompt_tokens
+                    total_completion_tokens += chunk.usage.completion_tokens
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    yield f"data: {json.dumps({'text': delta.content})}\n\n"
+            yield "data: [DONE]\n\n"
 
-            for tc in msg.tool_calls:
-                fn = tc.function.name
-                try:
-                    args = json.loads(tc.function.arguments)
-                except json.JSONDecodeError:
-                    args = {}
-
-                if fn == "search":
-                    query = args.get("query", user_message)
-                    top_k = max(1, min(int(args.get("top_k", 6)), 15))
-                    yield f"data: {json.dumps({'status': f'Searching: {query}'})}\n\n"
-                    results = rag.retrieve_combined(query, top_k=top_k)
-                    messages.append({"role": "tool", "tool_call_id": tc.id,
-                                     "content": _format_search_results(results) or "No results found."})
-                    search_count += 1
-
-                elif fn == "add_to_context":
-                    ids = [int(i) for i in args.get("ids", [])]
-                    collected_ids.update(ids)
-                    yield f"data: {json.dumps({'status': f'Loading {len(ids)} chunk(s) in full'})}\n\n"
-                    messages.append({"role": "tool", "tool_call_id": tc.id,
-                                     "content": f"Added chunk IDs {ids} to context."})
-
-        # --- build final context ---
-        context_parts = []
-        if collected_ids:
-            full_chunks = rag.get_chunks_by_ids(list(collected_ids))
-            if any("camps_list" in c.get("source", "") for c in full_chunks):
-                camps_all = rag.retrieve_by_source("camps_list")
-                camps_ids = {c["idx"] for c in camps_all}
-                extra = rag.get_chunks_by_ids([i for i in camps_ids if i not in collected_ids])
-                full_chunks = full_chunks + extra
-            for c in full_chunks:
-                context_parts.append(f"[{c['title']}]\n{c['text']}")
-
-        full_context_block = (
-            "Full text for selected chunks:\n\n" + "\n\n---\n\n".join(context_parts) + "\n\n"
-            if context_parts else ""
-        )
-        search_history = [m for m in messages[1:] if isinstance(m, dict) and m.get("role") == "tool"]
-        snippet_block = ""
-        if search_history:
-            snippet_block = "Search result snippets from earlier:\n\n" + "\n\n".join(
-                m["content"] for m in search_history if "ID:" in m.get("content", "")
-            ) + "\n\n"
-
-        final_messages = [
-            {"role": "system", "content": _build_answer_system()},
-            *history,
-            {"role": "user", "content": f"{full_context_block}{snippet_block}Question: {user_message}"},
-        ]
-
-        stream = client.chat.completions.create(
-            model=MODEL, max_tokens=4096, stream=True,
-            stream_options={"include_usage": True},
-            messages=final_messages,
-        )
-        for chunk in stream:
-            if chunk.usage:
-                total_prompt_tokens += chunk.usage.prompt_tokens
-                total_completion_tokens += chunk.usage.completion_tokens
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            if delta and delta.content:
-                yield f"data: {json.dumps({'text': delta.content})}\n\n"
-        yield "data: [DONE]\n\n"
+        except BadRequestError as e:
+            err_body = getattr(e, 'body', {}) or {}
+            if isinstance(err_body, dict) and err_body.get('error', {}).get('code') == 'content_filter':
+                yield f"data: {json.dumps({'text': 'The content filter blocked this response. Try rephrasing your question.'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'text': f'Request error: {e.message}'})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
 
         threading.Thread(
             target=_log_request,
