@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pickle
+import re
 from pathlib import Path
 
 import faiss
@@ -13,6 +14,12 @@ _index: faiss.IndexFlatIP | None = None
 _chunks: list[dict] = []
 _embed_fn = None
 _base_dir: str = ""
+_bm25 = None
+_bm25_corpus: list[list[str]] = []
+
+
+def _tokenize(text: str) -> list[str]:
+    return re.findall(r"\w+", text.lower())
 
 
 def _get_embed_fn():
@@ -33,6 +40,15 @@ def _get_embed_fn():
     return _embed_fn
 
 
+def _get_bm25():
+    global _bm25, _bm25_corpus
+    if _bm25 is None:
+        from rank_bm25 import BM25Okapi
+        _bm25_corpus = [_tokenize(c["title"] + " " + c["text"]) for c in _chunks]
+        _bm25 = BM25Okapi(_bm25_corpus)
+    return _bm25
+
+
 def load_prebuilt(base_dir: str) -> None:
     global _index, _chunks, _base_dir
     _base_dir = base_dir
@@ -45,6 +61,7 @@ def load_prebuilt(base_dir: str) -> None:
 
 
 def retrieve(query: str, top_k: int = TOP_K) -> list[dict]:
+    """Vector search only."""
     if _index is None or not _chunks:
         return []
     embed = _get_embed_fn()
@@ -56,10 +73,69 @@ def retrieve(query: str, top_k: int = TOP_K) -> list[dict]:
             continue
         chunk = _chunks[idx].copy()
         chunk["score"] = float(score)
+        chunk["idx"] = int(idx)
+        chunk["match"] = "vector"
         results.append(chunk)
     return results
 
 
+def retrieve_bm25(query: str, top_k: int = TOP_K) -> list[dict]:
+    """BM25 keyword search."""
+    if not _chunks:
+        return []
+    bm25 = _get_bm25()
+    tokens = _tokenize(query)
+    scores = bm25.get_scores(tokens)
+    top_indices = np.argsort(scores)[::-1][:top_k]
+    results = []
+    for idx in top_indices:
+        if scores[idx] <= 0:
+            continue
+        chunk = _chunks[idx].copy()
+        chunk["score"] = float(scores[idx])
+        chunk["idx"] = int(idx)
+        chunk["match"] = "keyword"
+        results.append(chunk)
+    return results
+
+
+def retrieve_combined(query: str, top_k: int = TOP_K) -> list[dict]:
+    """Run vector + BM25 in parallel and merge by idx, deduplicating."""
+    vec_results = retrieve(query, top_k=top_k)
+    bm25_results = retrieve_bm25(query, top_k=top_k)
+
+    seen: dict[int, dict] = {}
+    for c in vec_results:
+        seen[c["idx"]] = c
+
+    for c in bm25_results:
+        idx = c["idx"]
+        if idx in seen:
+            seen[idx]["match"] = "both"
+        else:
+            seen[idx] = c
+
+    # Sort: "both" first, then by vector score desc (bm25 scores aren't comparable)
+    combined = list(seen.values())
+    combined.sort(key=lambda x: (x["match"] != "both", -x.get("score", 0)))
+    return combined[:top_k * 2]  # allow more results when combining
+
+
+def get_chunks_by_ids(ids: list[int]) -> list[dict]:
+    """Return full chunks for the given FAISS index positions."""
+    result = []
+    for i in ids:
+        if 0 <= i < len(_chunks):
+            chunk = _chunks[i].copy()
+            chunk["idx"] = i
+            result.append(chunk)
+    return result
+
+
 def retrieve_by_source(source_substring: str) -> list[dict]:
     """Return all chunks whose source filename contains the given substring."""
-    return [c.copy() for c in _chunks if source_substring in c.get("source", "")]
+    return [
+        dict(c, idx=i)
+        for i, c in enumerate(_chunks)
+        if source_substring in c.get("source", "")
+    ]

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Kiezthropic</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #1a0a2e; color: #f0e6ff; padding: 2rem; }
+    h1 { color: #e0b0ff; font-size: 1.4rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #7050a0; font-size: 0.85rem; margin-bottom: 1.5rem; }
+    a.logout { color: #7050a0; font-size: 0.8rem; text-decoration: none; float: right; }
+    a.logout:hover { color: #b06de0; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0.25rem; margin-bottom: 1.5rem; border-bottom: 1px solid #3d2060; }
+    .tab { padding: 0.5rem 1.2rem; border-radius: 0.5rem 0.5rem 0 0; font-size: 0.9rem; font-weight: 600;
+           color: #7050a0; text-decoration: none; border: 1px solid transparent; border-bottom: none; }
+    .tab:hover { color: #b06de0; }
+    .tab.active { background: #2d1a4e; border-color: #3d2060; color: #e0b0ff; margin-bottom: -1px; }
+
+    /* Corrections */
+    h2 { color: #b06de0; font-size: 1rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid #3d2060; padding-bottom: 0.4rem; }
+    .empty { color: #5a3a7a; font-style: italic; font-size: 0.9rem; }
+    .badge { display: inline-block; background: #3d2060; color: #b06de0; border-radius: 1rem; padding: 0.1rem 0.5rem; font-size: 0.72rem; margin-left: 0.4rem; }
+    .card { background: #2d1a4e; border: 1px solid #4a2070; border-radius: 0.75rem; padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
+    .card-meta { color: #7050a0; font-size: 0.72rem; margin-bottom: 0.6rem; }
+    .card-field { margin-bottom: 0.5rem; font-size: 0.88rem; line-height: 1.5; }
+    .card-field .label { color: #a070d0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem; }
+    .card-field .value { color: #f0e6ff; }
+    .card-field .value.bad { color: #ff9090; }
+    .card-field .value.good { color: #90ff90; }
+    .card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+    .btn { padding: 0.35rem 0.9rem; border: none; border-radius: 0.4rem; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+    .btn-approve { background: #3a8a3a; color: #fff; }
+    .btn-approve:hover { background: #4aaa4a; }
+    .btn-delete { background: #5a2020; color: #ffaaaa; }
+    .btn-delete:hover { background: #7a3030; }
+
+    /* Stats */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { background: #2d1a4e; border: 1px solid #4a2070; border-radius: 0.75rem; padding: 1.2rem 1.4rem; }
+    .stat-label { color: #7050a0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.4rem; }
+    .stat-value { color: #e0b0ff; font-size: 1.6rem; font-weight: 700; }
+    .stat-sub { color: #9060c0; font-size: 0.75rem; margin-top: 0.2rem; }
+
+    .chart-wrap { background: #2d1a4e; border: 1px solid #4a2070; border-radius: 0.75rem; padding: 1.2rem; margin-bottom: 2rem; overflow-x: auto; }
+    .chart-wrap h3 { color: #b06de0; font-size: 0.9rem; margin-bottom: 1rem; }
+    .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
+    .bar-col { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 20px; }
+    .bar { width: 100%; background: #6b3fa0; border-radius: 3px 3px 0 0; transition: background 0.15s; }
+    .bar:hover { background: #b06de0; }
+    .bar-label { color: #5a3a7a; font-size: 0.55rem; margin-top: 4px; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th { color: #7050a0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #3d2060; }
+    td { padding: 0.45rem 0.6rem; border-bottom: 1px solid #2a1540; color: #d0b0f0; vertical-align: top; }
+    td.mono { font-family: monospace; font-size: 0.78rem; color: #a070d0; }
+    tr:last-child td { border-bottom: none; }
+    .table-wrap { background: #2d1a4e; border: 1px solid #4a2070; border-radius: 0.75rem; overflow: hidden; margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+  <a class="logout" href="/admin/logout">Logout</a>
+  <h1>🔥 Kiezthropic Admin</h1>
+
+  <div class="tabs">
+    <a class="tab {% if tab == 'corrections' %}active{% endif %}" href="/admin">Corrections</a>
+    <a class="tab {% if tab == 'stats' %}active{% endif %}" href="/admin/stats">Stats</a>
+  </div>
+
+  {% if tab == 'corrections' %}
+  <p class="subtitle">
+    Approved corrections are injected as context into every answer. &nbsp;
+    <a href="/admin/export" style="color:#b06de0;">Download corrections_seed.json</a> to make permanent.
+  </p>
+
+  <h2>Pending <span class="badge">{{ pending|length }}</span></h2>
+  {% if not pending %}<p class="empty">No pending corrections.</p>{% endif %}
+  {% for c in pending %}
+  <div class="card" data-id="{{ c.id }}">
+    <div class="card-meta">{{ c.created_at[:16] if c.created_at else '' }}</div>
+    {% if c.question %}<div class="card-field"><div class="label">Question</div><div class="value">{{ c.question }}</div></div>{% endif %}
+    {% if c.bad_answer %}<div class="card-field"><div class="label">Bad answer</div><div class="value bad">{{ c.bad_answer }}</div></div>{% endif %}
+    <div class="card-field"><div class="label">Correction</div><div class="value good">{{ c.correction }}</div></div>
+    <div class="card-actions">
+      <button class="btn btn-approve" onclick="approve(this)">✓ Approve</button>
+      <button class="btn btn-delete" onclick="del(this)">✗ Discard</button>
+    </div>
+  </div>
+  {% endfor %}
+
+  <h2>Approved <span class="badge">{{ approved|length }}</span></h2>
+  {% if not approved %}<p class="empty">No approved corrections yet.</p>{% endif %}
+  {% for c in approved %}
+  <div class="card" data-id="{{ c.id }}">
+    <div class="card-meta">{{ c.created_at[:16] if c.created_at else '' }}</div>
+    {% if c.question %}<div class="card-field"><div class="label">Question</div><div class="value">{{ c.question }}</div></div>{% endif %}
+    <div class="card-field"><div class="label">Correction</div><div class="value good">{{ c.correction }}</div></div>
+    <div class="card-actions">
+      <button class="btn btn-delete" onclick="del(this)">✗ Remove</button>
+    </div>
+  </div>
+  {% endfor %}
+
+  <script>
+    async function approve(btn) {
+      const card = btn.closest('.card');
+      const res = await fetch('/admin/approve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: parseInt(card.dataset.id)}) });
+      if (res.ok) card.remove(); else alert('Error: ' + await res.text());
+    }
+    async function del(btn) {
+      const card = btn.closest('.card');
+      const res = await fetch('/admin/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: parseInt(card.dataset.id)}) });
+      if (res.ok) card.remove(); else alert('Error: ' + await res.text());
+    }
+  </script>
+
+  {% elif tab == 'stats' %}
+
+  {% set total_tokens = totals.total_prompt_tokens + totals.total_completion_tokens %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Requests</div>
+      <div class="stat-value">{{ totals.total_requests }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Unique Visitors</div>
+      <div class="stat-value">{{ totals.unique_ips }}</div>
+      <div class="stat-sub">by IP</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Input Tokens</div>
+      <div class="stat-value">{{ "{:,}".format(totals.total_prompt_tokens) }}</div>
+      <div class="stat-sub">${{ "%.4f"|format(totals.total_prompt_tokens / 1000000 * cost_per_1m_in) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Output Tokens</div>
+      <div class="stat-value">{{ "{:,}".format(totals.total_completion_tokens) }}</div>
+      <div class="stat-sub">${{ "%.4f"|format(totals.total_completion_tokens / 1000000 * cost_per_1m_out) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Cost</div>
+      <div class="stat-value">${{ "%.4f"|format(total_cost) }}</div>
+      <div class="stat-sub">GPT-4o pricing</div>
+    </div>
+  </div>
+
+  {% if daily %}
+  <div class="chart-wrap">
+    <h3>Requests per day (last 30 days)</h3>
+    {% set max_reqs = daily|map(attribute='reqs')|max %}
+    <div class="bar-chart">
+      {% for d in daily %}
+      <div class="bar-col">
+        <div class="bar" style="height: {{ [((d.reqs / max_reqs) * 100)|int, 4]|max }}px" title="{{ d.day }}: {{ d.reqs }} requests"></div>
+        <div class="bar-label">{{ d.day|string|truncate(5, true, '') }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>IP</th><th>Question</th><th>In</th><th>Out</th><th>Cost</th></tr></thead>
+      <tbody>
+      {% for r in recent %}
+      {% set cost = (r.prompt_tokens / 1000000 * cost_per_1m_in) + (r.completion_tokens / 1000000 * cost_per_1m_out) %}
+      <tr>
+        <td class="mono">{{ r.created_at[:16] if r.created_at else '—' }}</td>
+        <td class="mono">{{ r.ip or '—' }}</td>
+        <td>{{ (r.question or '—')[:80] }}</td>
+        <td class="mono">{{ r.prompt_tokens }}</td>
+        <td class="mono">{{ r.completion_tokens }}</td>
+        <td class="mono">${{ "%.4f"|format(cost) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% endif %}
+</body>
+</html>

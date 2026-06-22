@@ -2,6 +2,7 @@
 import json
 import os
 import pickle
+import re
 import sys
 from pathlib import Path
 
@@ -14,6 +15,24 @@ from sentence_transformers import SentenceTransformer
 
 CHUNK_SIZE = 400
 CHUNK_OVERLAP = 50
+
+
+def preprocess(text: str) -> str:
+    # Replace wiki.kiezburn.org markdown links with just the link text
+    text = re.sub(r'\[([^\]]+)\]\(https?://wiki\.kiezburn\.org/[^\)]+\)', r'\1', text)
+    # Remove bare wiki.kiezburn.org URLs
+    text = re.sub(r'https?://wiki\.kiezburn\.org/\S+', '', text)
+    # Remove mention:// internal CMS links — replace [text](mention://...) with just text
+    text = re.sub(r'\[([^\]]+)\]\(mention://[^\)]+\)', r'\1', text)
+    # Remove /api/attachments image links entirely (not useful as text)
+    text = re.sub(r'\[[^\]]*\]\(/api/attachments[^\)]*\)', '', text)
+    text = re.sub(r'/api/attachments\S*', '', text)
+    # Remove /doc/ relative links — replace [text](/doc/...) with just text
+    text = re.sub(r'\[([^\]]+)\]\(/doc/[^\)]+\)', r'\1', text)
+    # Clean up empty markdown link parens left over
+    text = re.sub(r'\[([^\]]+)\]\(\s*\)', r'\1', text)
+    return text
+
 
 def chunk_text(text, title, source):
     words = text.split()
@@ -34,7 +53,7 @@ def build_and_save():
             continue
         for md_file in sorted(p.glob("*.md")):
             content = md_file.read_text(encoding="utf-8", errors="ignore")
-            import re
+            content = preprocess(content)
             title = re.sub(r"_[a-f0-9]{8}$", "", md_file.stem).replace("_", " ")
             chunks.extend(chunk_text(content, title, md_file.name))
 
