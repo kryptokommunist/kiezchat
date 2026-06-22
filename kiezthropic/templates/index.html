@@ -195,19 +195,23 @@
     }
     .welcome h2 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #b06de0; }
 
-    /* ---- side panel ---- */
-    #panel-toggle {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 1.1rem;
-      padding: 0.25rem 0.4rem;
-      border-radius: 0.4rem;
-      color: #a070d0;
+    /* ---- header stats pill ---- */
+    #header-stats {
       margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      padding: 0.3rem 0.7rem;
+      border-radius: 0.5rem;
       transition: background 0.15s;
+      border: 1px solid transparent;
     }
-    #panel-toggle:hover { background: #3d2060; }
+    #header-stats:hover { background: #3d2060; border-color: #4a2070; }
+    .hstat { display: flex; flex-direction: column; align-items: center; }
+    .hstat-val { font-size: 0.9rem; font-weight: 700; color: #e0b0ff; line-height: 1; }
+    .hstat-lbl { font-size: 0.6rem; color: #7050a0; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.1rem; }
+    .hstat-sep { width: 1px; height: 1.6rem; background: #3d2060; }
 
     #side-panel {
       position: fixed;
@@ -291,7 +295,13 @@
   <header>
     <h1>🔥 Kiezthropic</h1>
     <span>Ask anything about Kiez Burn 2026</span>
-    <button id="panel-toggle" title="Stats &amp; Admin">📊</button>
+    <div id="header-stats" title="Click for full stats">
+      <div class="hstat"><div class="hstat-val" id="hs-reqs">—</div><div class="hstat-lbl">Requests</div></div>
+      <div class="hstat-sep"></div>
+      <div class="hstat"><div class="hstat-val" id="hs-ips">—</div><div class="hstat-lbl">Visitors</div></div>
+      <div class="hstat-sep"></div>
+      <div class="hstat"><div class="hstat-val" id="hs-cost">—</div><div class="hstat-lbl">Cost</div></div>
+    </div>
   </header>
   <div id="messages">
     <div class="welcome">
@@ -343,7 +353,7 @@
 
   <script>
     // panel toggle
-    const panelToggle = document.getElementById('panel-toggle');
+    const headerStats = document.getElementById('header-stats');
     const panel = document.getElementById('side-panel');
     const overlay = document.getElementById('panel-overlay');
     const panelClose = document.getElementById('panel-close');
@@ -351,21 +361,25 @@
     function openPanel() {
       panel.classList.add('open');
       overlay.classList.add('open');
-      loadStats();
     }
     function closePanel() {
       panel.classList.remove('open');
       overlay.classList.remove('open');
     }
-    panelToggle.addEventListener('click', openPanel);
+    headerStats.addEventListener('click', openPanel);
     panelClose.addEventListener('click', closePanel);
     overlay.addEventListener('click', closePanel);
 
-    let statsLoaded = false;
     async function loadStats() {
-      if (statsLoaded) return;
       try {
         const data = await fetch('/stats.json').then(r => r.json());
+
+        // header inline values
+        document.getElementById('hs-reqs').textContent = data.total_requests.toLocaleString();
+        document.getElementById('hs-ips').textContent = data.unique_ips.toLocaleString();
+        document.getElementById('hs-cost').textContent = '$' + data.total_cost.toFixed(3);
+
+        // panel values
         document.getElementById('ps-reqs').textContent = data.total_requests.toLocaleString();
         document.getElementById('ps-ips').textContent = data.unique_ips.toLocaleString();
         document.getElementById('ps-tok').textContent = data.total_tokens >= 1000
@@ -388,9 +402,11 @@
         } else {
           bars.style.display = 'none';
         }
-        statsLoaded = true;
       } catch (_) {}
     }
+
+    // Load stats immediately on page load
+    loadStats();
   </script>
 
   <script>
