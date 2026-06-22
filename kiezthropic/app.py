@@ -309,6 +309,13 @@ def chat():
     user_message = data.get("message", "").strip()
     if not user_message:
         return {"error": "empty message"}, 400
+    # history: list of {role, content} from the frontend (preceding turns)
+    history = data.get("history", [])
+    history = [
+        {"role": h["role"], "content": str(h.get("content", ""))[:2000]}
+        for h in history
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant")
+    ][-10:]
 
     # Cloudflare sets CF-Connecting-IP; fall back to X-Forwarded-For then remote addr
     client_ip = (
@@ -391,6 +398,7 @@ def chat():
 
         final_messages = [
             {"role": "system", "content": _build_answer_system()},
+            *history,
             {"role": "user", "content": f"{full_context_block}{snippet_block}Question: {user_message}"},
         ]
 
