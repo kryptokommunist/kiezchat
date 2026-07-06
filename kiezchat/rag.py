@@ -33,11 +33,11 @@ def _get_embed_fn():
         from fastembed import TextEmbedding
         cache_dir = str(Path(_base_dir) / "fastembed_cache")
         model = TextEmbedding(
-            "sentence-transformers/all-MiniLM-L6-v2",
+            "BAAI/bge-small-en-v1.5",
             cache_dir=cache_dir,
         )
         def _fn(texts: list[str]) -> np.ndarray:
-            embs = list(model.embed(texts))
+            embs = list(model.query_embed(texts))
             arr = np.array(embs, dtype="float32")
             norms = np.linalg.norm(arr, axis=1, keepdims=True)
             return arr / np.maximum(norms, 1e-9)

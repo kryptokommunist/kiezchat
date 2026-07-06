@@ -1,20 +1,20 @@
 """Pre-build FAISS index and save to disk. Run this locally before deploying."""
-import json
-import os
 import pickle
 import re
 import sys
 from pathlib import Path
 
-# Run from the kiezchat directory
 sys.path.insert(0, str(Path(__file__).parent))
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
-CHUNK_SIZE = 400
-CHUNK_OVERLAP = 50
+EMBED_MODEL = "BAAI/bge-small-en-v1.5"
+
+# Wiki page chunking: target word count and sentence overlap
+CHUNK_TARGET_WORDS = 400
+CHUNK_OVERLAP_SENTENCES = 2
 
 # Telegram files have messages separated by [YYYY-MM-DD] date stamps.
 # We split on message boundaries so that messages from different events
@@ -47,44 +47,55 @@ def preprocess(text: str) -> str:
     return text
 
 
-def chunk_text(text, title, source):
-    words = text.split()
+def chunk_text(text: str, title: str, source: str) -> list[dict]:
+    """Sentence-aware chunking: split on sentence boundaries, accumulate to
+    CHUNK_TARGET_WORDS, carry over the last CHUNK_OVERLAP_SENTENCES sentences."""
+    raw = re.split(r"(?<=[.!?\n])\s+|(?<=\n)", text.strip())
+    sentences = [s.strip() for s in raw if s.strip()]
+    if not sentences:
+        return []
+
     chunks = []
-    for i in range(0, len(words), CHUNK_SIZE - CHUNK_OVERLAP):
-        chunks.append({
-            "text": " ".join(words[i: i + CHUNK_SIZE]),
-            "title": title,
-            "source": source,
-        })
+    current: list[str] = []
+    current_words = 0
+    seq = 0
+
+    for sent in sentences:
+        wc = len(sent.split())
+        if current_words + wc > CHUNK_TARGET_WORDS and current:
+            chunks.append({"text": " ".join(current), "title": title, "source": source, "seq": seq})
+            seq += 1
+            current = current[-CHUNK_OVERLAP_SENTENCES:]
+            current_words = sum(len(s.split()) for s in current)
+        current.append(sent)
+        current_words += wc
+
+    if current:
+        chunks.append({"text": " ".join(current), "title": title, "source": source, "seq": seq})
+
     return chunks
 
 
 def chunk_telegram(text: str, title: str, source: str) -> list[dict]:
     """Split a Telegram export on message boundaries ([YYYY-MM-DD] stamps).
 
-    Each message stays together as one chunk (unless it exceeds CHUNK_SIZE words,
+    Each message stays together as one chunk (unless it exceeds CHUNK_TARGET_WORDS,
     in which case it is split normally).  Messages before TELEGRAM_CUTOFF_DATE are
-    dropped (they contain BurnHalla and other pre-season noise).  Messages that
-    mention BurnHalla but not Kiez Burn are tagged so the LLM can de-prioritise them.
+    dropped.  Messages whose heading names BurnHalla are skipped entirely.
+    Messages that mention BurnHalla but not Kiez Burn get a [BurnHalla] title tag.
     """
-    # Strip the file header (lines before the first date stamp)
     header_end = TELEGRAM_MSG_RE.search(text)
     body = text[header_end.start():] if header_end else text
 
-    # Split into individual messages
     raw_messages = TELEGRAM_MSG_RE.split(body)
     raw_messages = [m.strip() for m in raw_messages if m.strip()]
 
     date_re = re.compile(r"^\[(\d{4}-\d{2}-\d{2})\]")
     chunks = []
     for msg in raw_messages:
-        # Filter out messages before cutoff date
         m = date_re.match(msg)
         if m and m.group(1) < TELEGRAM_CUTOFF_DATE:
             continue
-
-        # Skip messages that are primarily announcements for BurnHalla
-        # (these have BurnHalla in the heading after the date stamp)
         if BURNHALLA_MSG_RE.match(msg):
             continue
 
@@ -93,21 +104,16 @@ def chunk_telegram(text: str, title: str, source: str) -> list[dict]:
         if not words:
             continue
 
-        # Determine event context for this message
         is_burnhalla = bool(BURNHALLA_RE.search(msg))
         is_kiezburn = bool(KIEZBURN_RE.search(msg))
-        if is_burnhalla and not is_kiezburn:
-            msg_title = f"{title} [BurnHalla]"
-        else:
-            msg_title = title
+        msg_title = f"{title} [BurnHalla]" if (is_burnhalla and not is_kiezburn) else title
 
-        if len(words) <= CHUNK_SIZE:
+        if len(words) <= CHUNK_TARGET_WORDS:
             chunks.append({"text": msg, "title": msg_title, "source": source})
         else:
-            # Long message: split with overlap but keep the title tag
-            for i in range(0, len(words), CHUNK_SIZE - CHUNK_OVERLAP):
+            for i in range(0, len(words), CHUNK_TARGET_WORDS - CHUNK_OVERLAP_SENTENCES * 15):
                 chunks.append({
-                    "text": " ".join(words[i: i + CHUNK_SIZE]),
+                    "text": " ".join(words[i: i + CHUNK_TARGET_WORDS]),
                     "title": msg_title,
                     "source": source,
                 })
@@ -124,7 +130,6 @@ def build_and_save():
             content = md_file.read_text(encoding="utf-8", errors="ignore")
             title = re.sub(r"_[a-f0-9]{8}$", "", md_file.stem).replace("_", " ")
 
-            # Use message-boundary chunking for Telegram exports
             if md_file.name.startswith("telegram_"):
                 file_chunks = chunk_telegram(content, title, md_file.name)
             else:
@@ -134,20 +139,23 @@ def build_and_save():
             chunks.extend(file_chunks)
 
     print(f"Total chunks: {len(chunks)}")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    model = TextEmbedding(EMBED_MODEL, cache_dir="fastembed_cache")
     texts = [c["text"] for c in chunks]
-    embeddings = model.encode(texts, batch_size=64, show_progress_bar=True, normalize_embeddings=True)
-    embeddings = np.array(embeddings, dtype="float32")
+    embeddings = np.array(list(model.embed(texts)), dtype="float32")
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    embeddings = embeddings / np.maximum(norms, 1e-9)
 
     dim = embeddings.shape[1]
     index = faiss.IndexFlatIP(dim)
     index.add(embeddings)
-    print(f"Index built: {index.ntotal} vectors, dim={dim}")
+    print(f"Index built: {index.ntotal} vectors, dim={dim}, model={EMBED_MODEL}")
 
     faiss.write_index(index, "faiss_index.bin")
     with open("chunks.pkl", "wb") as f:
         pickle.dump(chunks, f)
     print("Saved faiss_index.bin and chunks.pkl")
+
 
 if __name__ == "__main__":
     build_and_save()
