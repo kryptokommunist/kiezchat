@@ -32,7 +32,4 @@ cd kiezchat && python build_index.py
 
 ## Remotes
 
-- `origin` — SAP GitHub (internal): `git@github.tools.sap:I771869/kiezburn.git`
 - `github` — public GitHub: `https://github.com/kryptokommunist/kiezchat.git`
-
-Push to both after changes.
