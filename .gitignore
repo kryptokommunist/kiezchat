@@ -5,10 +5,10 @@ __pycache__/
 .DS_Store
 .settings
 *.session
-kiezthropic/faiss_index.bin
-kiezthropic/chunks.pkl
-kiezthropic/fastembed_cache/
-kiezthropic/admin_password.txt
+kiezchat/faiss_index.bin
+kiezchat/chunks.pkl
+kiezchat/fastembed_cache/
+kiezchat/admin_password.txt
 wiki_pages/
-kiezthropic/wiki_pages/
-kiezthropic/wiki_pages_extra/
+kiezchat/wiki_pages/
+kiezchat/wiki_pages_extra/

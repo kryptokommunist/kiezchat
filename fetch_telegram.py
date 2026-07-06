@@ -19,7 +19,7 @@ from pathlib import Path
 API_ID = 32917418
 API_HASH = "7dba9a8e2f84e9bf6ee7f47ea2c6993d"
 SESSION_PATH = str(Path(__file__).parent / "telegram-autocalendar" / "session" / "telegram_session")
-OUT_DIR = Path(__file__).parent / "kiezthropic" / "wiki_pages_extra"
+OUT_DIR = Path(__file__).parent / "kiezchat" / "wiki_pages_extra"
 
 # Chat names to search for (case-insensitive substring match)
 CHATS = [

@@ -8,7 +8,7 @@ The app is deployed on SAP Cloud Foundry and uses SAP AI Core (GPT-4o) for infer
 
 ```
 wiki_pages/          ← Outline wiki dumps (local only, gitignored)
-kiezthropic/
+kiezchat/
   wiki_pages/        ← symlinked / copied wiki pages for the app (local only)
   wiki_pages_extra/  ← Telegram chat exports (local only)
   app.py             ← Flask app, RAG pipeline, AI Core integration
@@ -47,7 +47,7 @@ export AICORE_API_URL=...
 ./download_wiki.sh
 ```
 
-This downloads all wiki pages from Outline into `wiki_pages/`. Copy or symlink them into `kiezthropic/wiki_pages/`.
+This downloads all wiki pages from Outline into `wiki_pages/`. Copy or symlink them into `kiezchat/wiki_pages/`.
 
 ### 3. Obtain Telegram chat logs (optional)
 
@@ -63,12 +63,12 @@ Then fetch messages:
 python3 fetch_telegram.py
 ```
 
-Output goes to `kiezthropic/wiki_pages_extra/` as anonymized markdown files.
+Output goes to `kiezchat/wiki_pages_extra/` as anonymized markdown files.
 
 ### 4. Build the search index
 
 ```bash
-cd kiezthropic
+cd kiezchat
 pip install -r requirements.txt
 python build_index.py
 ```
@@ -78,18 +78,18 @@ This produces `faiss_index.bin` and `chunks.pkl` (both gitignored).
 ### 5. Run locally
 
 ```bash
-cd kiezthropic
+cd kiezchat
 flask run
 # or
 gunicorn app:app
 ```
 
-Set `ADMIN_PASSWORD` env var or create `kiezthropic/admin_password.txt` (gitignored) for the admin dashboard at `/admin`.
+Set `ADMIN_PASSWORD` env var or create `kiezchat/admin_password.txt` (gitignored) for the admin dashboard at `/admin`.
 
 ## Deployment (SAP Cloud Foundry)
 
 ```bash
-cd kiezthropic
+cd kiezchat
 cf push
 ```
 

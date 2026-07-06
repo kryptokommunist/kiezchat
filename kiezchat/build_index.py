@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-# Run from the kiezthropic directory
+# Run from the kiezchat directory
 sys.path.insert(0, str(Path(__file__).parent))
 
 import faiss

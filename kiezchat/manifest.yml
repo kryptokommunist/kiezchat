@@ -1,5 +1,5 @@
 applications:
-  - name: kiezthropic
+  - name: kiezchat
     memory: 1500M
     disk_quota: 2G
     instances: 1

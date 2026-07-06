@@ -87,7 +87,7 @@ def get_openai_client() -> OpenAI:
 # ---------------------------------------------------------------------------
 
 WIKI_DIR = Path(__file__).parent
-DB_PATH = WIKI_DIR / "kiezthropic.db"
+DB_PATH = WIKI_DIR / "kiezchat.db"
 SEED_PATH = WIKI_DIR / "corrections_seed.json"
 ADMIN_PASSWORD_FILE = WIKI_DIR / "admin_password.txt"
 

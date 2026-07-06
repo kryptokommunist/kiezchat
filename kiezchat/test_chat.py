@@ -1,4 +1,4 @@
-"""Integration tests for kiezthropic RAG chat app.
+"""Integration tests for kiezchat RAG chat app.
 
 Run locally:
     ANTHROPIC_API_KEY=... python -m pytest test_chat.py -v
