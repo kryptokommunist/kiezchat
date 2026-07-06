@@ -1,3 +1,0 @@
-# Closing round and feedback
-
-

@@ -1,3 +1,0 @@
-# Immediacy session / Q&As
-
-
