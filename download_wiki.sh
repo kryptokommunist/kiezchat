@@ -1,8 +1,12 @@
 #!/bin/bash
 
-API_TOKEN="ol_api_dCDyNkmMFcxX5md6urxzHqNjzlzwsC4jwp74zh"
-BASE_URL="https://wiki.kiezburn.org/api"
-COLLECTION_ID="e5d9ce44-3fa0-4a36-a2de-490074977f94"
+SCRIPT_DIR="$(dirname "$0")"
+if [ -f "$SCRIPT_DIR/.settings" ]; then
+  source "$SCRIPT_DIR/.settings"
+fi
+API_TOKEN="${WIKI_API_TOKEN}"
+BASE_URL="${WIKI_BASE_URL:-https://wiki.kiezburn.org/api}"
+COLLECTION_ID="${WIKI_COLLECTION_ID_2026}"
 OUTPUT_DIR="$(dirname "$0")/wiki_pages"
 
 mkdir -p "$OUTPUT_DIR"
