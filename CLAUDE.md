@@ -2,18 +2,18 @@
 
 ## Project structure
 
-- `kiezthropic/` — the Flask chat app (RAG over wiki + Telegram)
+- `kiezchat/` — the Flask chat app (RAG over wiki + Telegram)
 - `download_wiki.sh` — downloads wiki from Outline API (reads creds from `.settings`)
-- `fetch_telegram.py` — downloads Telegram messages, saves to `kiezthropic/wiki_pages_extra/`
+- `fetch_telegram.py` — downloads Telegram messages, saves to `kiezchat/wiki_pages_extra/`
 - `telegram_auth.py` — one-time Telethon session auth
 
 ## Gitignored data (local only)
 
-- `wiki_pages/` and `kiezthropic/wiki_pages/` — Outline wiki dumps
-- `kiezthropic/wiki_pages_extra/` — Telegram exports
-- `kiezthropic/faiss_index.bin` + `kiezthropic/chunks.pkl` — built search index
+- `wiki_pages/` and `kiezchat/wiki_pages/` — Outline wiki dumps
+- `kiezchat/wiki_pages_extra/` — Telegram exports
+- `kiezchat/faiss_index.bin` + `kiezchat/chunks.pkl` — built search index
 - `.settings` — API credentials
-- `kiezthropic/admin_password.txt` — admin dashboard password
+- `kiezchat/admin_password.txt` — admin dashboard password
 
 Never commit any of these.
 
@@ -27,7 +27,7 @@ AI Core creds come from `VCAP_SERVICES` on CF or individual `AICORE_*` env vars 
 After updating wiki pages or Telegram exports, run:
 
 ```bash
-cd kiezthropic && python build_index.py
+cd kiezchat && python build_index.py
 ```
 
 ## Remotes
