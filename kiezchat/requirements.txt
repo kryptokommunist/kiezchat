@@ -7,4 +7,3 @@ faiss-cpu==1.8.0
 fastembed==0.3.6
 numpy==1.26.4
 gunicorn==22.0.0
-sentence-transformers>=2.7.0
