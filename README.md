@@ -9,16 +9,59 @@ The app is deployed on SAP Cloud Foundry and uses SAP AI Core (GPT-4o) for infer
 ```
 wiki_pages/          ← Outline wiki dumps (local only, gitignored)
 kiezchat/
-  wiki_pages/        ← symlinked / copied wiki pages for the app (local only)
-  wiki_pages_extra/  ← Telegram chat exports (local only)
-  app.py             ← Flask app, RAG pipeline, AI Core integration
+  wiki_pages/        ← wiki pages used by the app (local only, gitignored)
+  wiki_pages_extra/  ← Telegram chat exports (local only, gitignored)
+  app.py             ← Flask app, agentic RAG loop, AI Core integration
   rag.py             ← BM25 + FAISS hybrid retrieval
-  build_index.py     ← builds faiss_index.bin + chunks.pkl from wiki pages
+  build_index.py     ← preprocesses markdown, chunks text, builds index
+  corrections_seed.json ← approved answer corrections, seeded into SQLite on deploy
   templates/         ← chat UI, admin dashboard
 download_wiki.sh     ← downloads wiki pages from Outline API
 fetch_telegram.py    ← downloads Telegram messages (Berlin Burners, KB News)
-telegram_auth.py     ← one-time Telegram session auth helper
+telegram_auth.py     ← one-time Telethon session auth helper
 ```
+
+## How the RAG works
+
+### 1. Data sources
+
+Two sources are combined into a single index:
+
+- **Wiki pages** (`wiki_pages/`) — exported from the Outline wiki at wiki.kiezburn.org via the API. One markdown file per page.
+- **Telegram exports** (`wiki_pages_extra/`) — messages from the Berlin Burners and Kiez Burn News channels, fetched with Telethon and saved as anonymized markdown (sender info stripped).
+
+### 2. Preprocessing (`build_index.py`)
+
+Each markdown file is cleaned before chunking:
+
+- Internal wiki links (`[text](https://wiki.kiezburn.org/...)`) are reduced to their link text.
+- CMS-internal links (`mention://...`, `/doc/...`) are stripped, keeping only the display text.
+- Image attachment links (`/api/attachments/...`) are removed entirely.
+- The page title is derived from the filename by removing the 8-character Outline UUID suffix and replacing underscores with spaces.
+
+Text is then split into overlapping word-level chunks (400 words, 50-word overlap) so long pages don't exceed the context window and adjacent chunks share some context.
+
+### 3. Index (`build_index.py`)
+
+All chunks are embedded with `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional vectors, L2-normalized) and stored in a FAISS `IndexFlatIP` (inner-product / cosine similarity). The index and chunk metadata are saved to `faiss_index.bin` and `chunks.pkl`, both loaded into memory at app startup.
+
+### 4. Retrieval (`rag.py`)
+
+Each query runs two searches in parallel and merges the results:
+
+- **Vector search** — embeds the query with the same MiniLM model, finds the top-K nearest chunks by cosine similarity.
+- **BM25 keyword search** — tokenizes the query and scores all chunks using BM25Okapi (rank-bm25).
+
+Chunks that appear in both result sets are ranked first (tagged `"both"`), followed by vector-only hits sorted by cosine score. Up to `top_k * 2` results are returned when both methods are combined.
+
+### 5. Agentic answer loop (`app.py`)
+
+The app uses a two-phase agentic loop rather than a single retrieval-then-answer step:
+
+1. **Search phase** — the model is given a `search()` tool and an `add_to_context()` tool. It calls `search()` with specific terms (up to 3 times), inspects truncated snippets, then calls `add_to_context()` with the IDs of the most relevant chunks to fetch their full text.
+2. **Answer phase** — once tool calls are exhausted, the model generates a streaming answer using the full chunk text as context.
+
+The system prompt injects any approved corrections from the SQLite database so known bad answers are overridden regardless of what the retrieved chunks say.
 
 ## Setup
 
