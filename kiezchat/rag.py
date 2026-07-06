@@ -93,7 +93,46 @@ def load_prebuilt(base_dir: str) -> None:
         _chunks = all_chunks
         _index = full_index
 
+    _build_source_ranges()
     print(f"Loaded pre-built index: {_index.ntotal} vectors, {len(_chunks)} chunks (EVENT_YEAR={EVENT_YEAR or 'all'})")
+
+
+# ---------------------------------------------------------------------------
+# Source-range map — built at load time, used for context expansion
+# ---------------------------------------------------------------------------
+
+_source_ranges: dict[str, tuple[int, int]] = {}
+
+
+def _build_source_ranges() -> None:
+    global _source_ranges
+    _source_ranges = {}
+    current_src: str | None = None
+    start = 0
+    for i, c in enumerate(_chunks):
+        src = c["source"]
+        if src != current_src:
+            if current_src is not None:
+                _source_ranges[current_src] = (start, i - 1)
+            current_src = src
+            start = i
+    if current_src is not None:
+        _source_ranges[current_src] = (start, len(_chunks) - 1)
+
+
+def expand_context(ids: list[int], window: int = 1) -> list[int]:
+    """Return ids expanded to include ±window neighbors within the same source."""
+    expanded: set[int] = set(ids)
+    for idx in ids:
+        if idx < 0 or idx >= len(_chunks):
+            continue
+        src = _chunks[idx]["source"]
+        lo, hi = _source_ranges.get(src, (idx, idx))
+        for offset in range(-window, window + 1):
+            neighbor = idx + offset
+            if lo <= neighbor <= hi:
+                expanded.add(neighbor)
+    return sorted(expanded)
 
 
 def retrieve(query: str, top_k: int = TOP_K) -> list[dict]:
@@ -135,26 +174,52 @@ def retrieve_bm25(query: str, top_k: int = TOP_K) -> list[dict]:
     return results
 
 
+RRF_K = 60
+MAX_CHUNKS_PER_SOURCE = 2
+
+
+def _source_dedup(results: list[dict], max_per_source: int = MAX_CHUNKS_PER_SOURCE) -> list[dict]:
+    seen: dict[str, int] = {}
+    out = []
+    for chunk in results:
+        src = chunk.get("source", "")
+        if seen.get(src, 0) < max_per_source:
+            out.append(chunk)
+            seen[src] = seen.get(src, 0) + 1
+    return out
+
+
 def retrieve_combined(query: str, top_k: int = TOP_K) -> list[dict]:
-    """Run vector + BM25 in parallel and merge by idx, deduplicating."""
+    """Hybrid vector + BM25 search merged with Reciprocal Rank Fusion."""
     vec_results = retrieve(query, top_k=top_k)
     bm25_results = retrieve_bm25(query, top_k=top_k)
 
-    seen: dict[int, dict] = {}
-    for c in vec_results:
-        seen[c["idx"]] = c
+    rrf_scores: dict[int, float] = {}
+    for rank, c in enumerate(vec_results):
+        rrf_scores[c["idx"]] = rrf_scores.get(c["idx"], 0.0) + 1.0 / (RRF_K + rank + 1)
+    for rank, c in enumerate(bm25_results):
+        rrf_scores[c["idx"]] = rrf_scores.get(c["idx"], 0.0) + 1.0 / (RRF_K + rank + 1)
 
-    for c in bm25_results:
-        idx = c["idx"]
-        if idx in seen:
-            seen[idx]["match"] = "both"
-        else:
-            seen[idx] = c
+    all_candidates: dict[int, dict] = {}
+    for c in vec_results + bm25_results:
+        if c["idx"] not in all_candidates:
+            all_candidates[c["idx"]] = c
 
-    # Sort: "both" first, then by vector score desc (bm25 scores aren't comparable)
-    combined = list(seen.values())
-    combined.sort(key=lambda x: (x["match"] != "both", -x.get("score", 0)))
-    return combined[:top_k * 2]  # allow more results when combining
+    vec_set = {c["idx"] for c in vec_results}
+    bm25_set = {c["idx"] for c in bm25_results}
+
+    sorted_ids = sorted(rrf_scores, key=lambda x: -rrf_scores[x])[: top_k * 2]
+    results = []
+    for idx in sorted_ids:
+        chunk = all_candidates[idx].copy()
+        chunk["rrf_score"] = rrf_scores[idx]
+        chunk["match"] = (
+            "both" if (idx in vec_set and idx in bm25_set)
+            else ("vector" if idx in vec_set else "keyword")
+        )
+        results.append(chunk)
+
+    return _source_dedup(results)
 
 
 def get_chunks_by_ids(ids: list[int]) -> list[dict]:

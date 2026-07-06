@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -277,10 +278,24 @@ def _build_answer_system() -> str:
     )
 
 
+def _smart_snippet(text: str, max_chars: int = 600) -> str:
+    """Truncate at the last sentence boundary within max_chars."""
+    flat = text.replace("\n", " ")
+    if len(flat) <= max_chars:
+        return flat
+    boundaries = [m.end() for m in re.finditer(r"(?<=[.!?])\s", flat[:max_chars])]
+    if boundaries:
+        return flat[: boundaries[-1]].rstrip()
+    last_space = flat.rfind(" ", 0, max_chars)
+    if last_space > int(max_chars * 0.7):
+        return flat[:last_space]
+    return flat[:max_chars]
+
+
 def _format_search_results(chunks: list[dict]) -> str:
     lines = []
     for c in chunks:
-        snippet = c["text"][:600].replace("\n", " ")
+        snippet = _smart_snippet(c["text"])
         lines.append(f'ID:{c["idx"]} [{c.get("match","vector")}] | {c["title"]} | {snippet}…')
     return "\n".join(lines)
 
@@ -373,10 +388,13 @@ def chat():
 
                     elif fn == "add_to_context":
                         ids = [int(i) for i in args.get("ids", [])]
-                        collected_ids.update(ids)
-                        yield f"data: {json.dumps({'status': f'Loading {len(ids)} chunk(s) in full'})}\n\n"
+                        expanded_ids = rag.expand_context(ids, window=1)
+                        collected_ids.update(expanded_ids)
+                        extra = len(expanded_ids) - len(ids)
+                        status = f'Loading {len(ids)} chunk(s)' + (f' + {extra} neighbor(s)' if extra else '')
+                        yield f"data: {json.dumps({'status': status})}\n\n"
                         messages.append({"role": "tool", "tool_call_id": tc.id,
-                                         "content": f"Added chunk IDs {ids} to context."})
+                                         "content": f"Added chunk IDs {ids} (expanded to {expanded_ids}) to context."})
 
             # --- build final context ---
             context_parts = []
