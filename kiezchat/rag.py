@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import pickle
 import re
+import threading
 from pathlib import Path
 
 import faiss
@@ -52,6 +53,42 @@ def _get_bm25():
         _bm25_corpus = [_tokenize(c["title"] + " " + c["text"]) for c in _chunks]
         _bm25 = BM25Okapi(_bm25_corpus)
     return _bm25
+
+
+_reranker = None
+_reranker_lock = threading.Lock()
+
+
+def _get_reranker():
+    global _reranker
+    if _reranker is None:
+        with _reranker_lock:
+            if _reranker is None:
+                try:
+                    from sentence_transformers.cross_encoder import CrossEncoder
+                    _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-2-v2", max_length=512)
+                    print("Cross-encoder reranker loaded.")
+                except Exception as e:
+                    print(f"Reranker unavailable: {e}")
+                    _reranker = False
+    return _reranker if _reranker is not False else None
+
+
+def rerank(query: str, candidates: list[dict]) -> list[dict]:
+    """Re-score candidates with a cross-encoder; falls back to original order."""
+    reranker = _get_reranker()
+    if not reranker or not candidates:
+        return candidates
+    try:
+        pairs = [(query, c["text"][:512]) for c in candidates]
+        scores = reranker.predict(pairs)
+        ranked = sorted(zip(scores, candidates), key=lambda x: -x[0])
+        for score, chunk in ranked:
+            chunk["rerank_score"] = float(score)
+        return [chunk for _, chunk in ranked]
+    except Exception as e:
+        print(f"Reranking failed: {e}")
+        return candidates
 
 
 def _year_in_filename(filename: str) -> str | None:

@@ -265,7 +265,8 @@ Answer questions using the provided wiki context. Be friendly, direct, and conci
 When listing camps or installations, provide a complete list — do not truncate or summarize.
 If the question is vague, give a useful overview of Kiez Burn rather than asking for clarification.
 If the context doesn't cover the question, say so briefly and suggest what to ask instead.
-Only answer about Kiez Burn {EVENT_YEAR} — do not reference past years unless explicitly asked."""
+Only answer about Kiez Burn {EVENT_YEAR} — do not reference past years unless explicitly asked.
+When multiple sources were used, end your answer with a brief "Sources: [title1], [title2]" line."""
 
 
 def _build_answer_system() -> str:
@@ -382,6 +383,7 @@ def chat():
                         top_k = max(1, min(int(args.get("top_k", 6)), 15))
                         yield f"data: {json.dumps({'status': f'Searching: {query}'})}\n\n"
                         results = rag.retrieve_combined(query, top_k=top_k)
+                        results = rag.rerank(query, results)
                         messages.append({"role": "tool", "tool_call_id": tc.id,
                                          "content": _format_search_results(results) or "No results found."})
                         search_count += 1
@@ -398,6 +400,7 @@ def chat():
 
             # --- build final context ---
             context_parts = []
+            sources_used: list[str] = []
             if collected_ids:
                 full_chunks = rag.get_chunks_by_ids(list(collected_ids))
                 if any("camps_list" in c.get("source", "") for c in full_chunks):
@@ -405,8 +408,13 @@ def chat():
                     camps_ids = {c["idx"] for c in camps_all}
                     extra = rag.get_chunks_by_ids([i for i in camps_ids if i not in collected_ids])
                     full_chunks = full_chunks + extra
+                seen_titles: set[str] = set()
                 for c in full_chunks:
                     context_parts.append(f"[{c['title']}]\n{c['text']}")
+                    t = c["title"]
+                    if t not in seen_titles:
+                        seen_titles.add(t)
+                        sources_used.append(t)
 
             full_context_block = (
                 "Full text for selected chunks:\n\n" + "\n\n---\n\n".join(context_parts) + "\n\n"
@@ -419,10 +427,14 @@ def chat():
                     m["content"] for m in search_history if "ID:" in m.get("content", "")
                 ) + "\n\n"
 
+            sources_block = ""
+            if len(sources_used) > 1:
+                sources_block = "Sources used: " + ", ".join(sources_used) + "\n\n"
+
             final_messages = [
                 {"role": "system", "content": _build_answer_system()},
                 *history,
-                {"role": "user", "content": f"{full_context_block}{snippet_block}Question: {user_message}"},
+                {"role": "user", "content": f"{full_context_block}{snippet_block}{sources_block}Question: {user_message}"},
             ]
 
             stream = client.chat.completions.create(
