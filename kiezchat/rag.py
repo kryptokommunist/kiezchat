@@ -1,6 +1,7 @@
 """RAG retriever using pre-built FAISS index + fastembed (ONNX, no PyTorch)."""
 from __future__ import annotations
 
+import os
 import pickle
 import re
 from pathlib import Path
@@ -9,6 +10,10 @@ import faiss
 import numpy as np
 
 TOP_K = 5
+
+# Chunks whose source filename contains a year other than EVENT_YEAR are excluded
+# at load time. Set EVENT_YEAR="" to disable filtering.
+EVENT_YEAR: str = os.environ.get("EVENT_YEAR", "2026")
 
 _index: faiss.IndexFlatIP | None = None
 _chunks: list[dict] = []
@@ -49,15 +54,46 @@ def _get_bm25():
     return _bm25
 
 
+def _year_in_filename(filename: str) -> str | None:
+    """Return a 4-digit year string if one appears in the filename, else None."""
+    m = re.search(r"(20\d{2})", filename)
+    return m.group(1) if m else None
+
+
 def load_prebuilt(base_dir: str) -> None:
     global _index, _chunks, _base_dir
     _base_dir = base_dir
     index_path = Path(base_dir) / "faiss_index.bin"
     chunks_path = Path(base_dir) / "chunks.pkl"
-    _index = faiss.read_index(str(index_path))
+    full_index = faiss.read_index(str(index_path))
     with open(chunks_path, "rb") as f:
-        _chunks = pickle.load(f)
-    print(f"Loaded pre-built index: {_index.ntotal} vectors, {len(_chunks)} chunks")
+        all_chunks: list[dict] = pickle.load(f)
+
+    if EVENT_YEAR:
+        kept_faiss_ids = []
+        kept_chunks = []
+        for faiss_idx, chunk in enumerate(all_chunks):
+            year = _year_in_filename(chunk.get("source", ""))
+            if year is None or year == EVENT_YEAR:
+                kept_chunks.append(chunk)
+                kept_faiss_ids.append(faiss_idx)
+        skipped = len(all_chunks) - len(kept_chunks)
+        if skipped:
+            print(f"Year filter (EVENT_YEAR={EVENT_YEAR}): skipped {skipped} chunks from other years")
+        _chunks = kept_chunks
+
+        # Build a sub-index with only the kept vectors so chunk IDs stay sequential
+        dim = full_index.d
+        sub_index = faiss.IndexFlatIP(dim)
+        all_vecs = faiss.rev_swig_ptr(full_index.get_xb(), full_index.ntotal * dim)
+        all_vecs = np.frombuffer(all_vecs, dtype="float32").reshape(full_index.ntotal, dim)
+        sub_index.add(all_vecs[kept_faiss_ids])
+        _index = sub_index
+    else:
+        _chunks = all_chunks
+        _index = full_index
+
+    print(f"Loaded pre-built index: {_index.ntotal} vectors, {len(_chunks)} chunks (EVENT_YEAR={EVENT_YEAR or 'all'})")
 
 
 def retrieve(query: str, top_k: int = TOP_K) -> list[dict]:

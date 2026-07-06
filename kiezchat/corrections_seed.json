@@ -1,1 +1,23 @@
-{"version": "1", "corrections": []}
+{
+  "version": "2",
+  "corrections": [
+    {
+      "question": "ticket name change deadline / how to transfer ticket / swap ticket",
+      "bad_answer": "Name changes must be made at least 24 hours before the start of the event.",
+      "correction": "For Kiez Burn 2026, the deadline to transfer or change the name on a ticket was June 9, 2026 (14 days before the event starts on June 23). After that date, ticket name changes are no longer possible. Everyone must present a ticket and matching ID/passport at the gate — no exceptions. The 24-hour deadline belongs to BurnHalla, a different event, and does not apply to Kiez Burn.",
+      "created_at": "2026-07-06T00:00:00+00:00"
+    },
+    {
+      "question": "can I sell my ticket for more than face value / charging more for ticket",
+      "bad_answer": null,
+      "correction": "Charging more than the original ticket price when transferring a ticket is a violation of the No Commerce principle at Kiez Burn. Ticket transfers should be done at cost (what you paid), not for profit. This is explicitly stated in the ticket transfer instructions.",
+      "created_at": "2026-07-06T00:00:00+00:00"
+    },
+    {
+      "question": "I don't want to do a shift / attending without volunteering",
+      "bad_answer": "If you'd just like to join the event as an attendee and enjoy what others are already planning, that's also perfectly fine.",
+      "correction": "At Kiez Burn, participation is a core principle — the event is created by everyone, not consumed. However, formal volunteer shifts are not mandatory. You can contribute in many ways: helping your camp, joining spontaneous tasks, gifting skills or art. If someone says they don't want to do a formal shift, do not push them to volunteer or suggest they are just a passive attendee. Acknowledge that participation takes many forms.",
+      "created_at": "2026-07-06T00:00:00+00:00"
+    }
+  ]
+}

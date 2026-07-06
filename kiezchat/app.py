@@ -48,6 +48,7 @@ AICORE_CREDS = _load_aicore_credentials()
 DEPLOYMENT_ID = os.environ.get("AICORE_DEPLOYMENT_ID", "d34c832f51430c83")
 RESOURCE_GROUP = os.environ.get("AICORE_RESOURCE_GROUP", "default")
 MODEL = os.environ.get("AICORE_MODEL", "gpt-4o")
+EVENT_YEAR = os.environ.get("EVENT_YEAR", "2026")
 
 _token_cache: dict = {"token": "", "expires_at": 0.0}
 _token_lock = threading.Lock()
@@ -239,7 +240,7 @@ TOOLS = [
     },
 ]
 
-AGENTIC_SYSTEM = """You are Kiezthropic, a helpful assistant for Kiez Burn — a Burning Man-inspired community event near Berlin.
+AGENTIC_SYSTEM = f"""You are Kiezthropic, a helpful assistant for Kiez Burn {EVENT_YEAR} — a Burning Man-inspired community event near Berlin.
 
 You have access to a wiki search tool that runs semantic + keyword search in parallel. Follow this process:
 
@@ -251,17 +252,19 @@ You have access to a wiki search tool that runs semantic + keyword search in par
 Important rules:
 - ALWAYS call add_to_context() after each search with the most relevant IDs — never skip this step.
 - Results tagged "both" matched semantic + keyword search and are usually most relevant.
-- For listing questions (camps, installations, etc.): search "camps list 2026", add those IDs.
+- For listing questions (camps, installations, etc.): search "camps list {EVENT_YEAR}", add those IDs.
 - For factual questions: add the IDs of chunks most likely to contain the answer, even if the snippet seems incomplete.
 - After adding context, answer directly without calling more tools unless a second search is clearly needed.
 - If the question is vague or a general greeting, treat it as "tell me about Kiez Burn" and search for an overview.
-- NEVER ask the user to clarify — always make your best guess at what they want and answer it."""
+- NEVER ask the user to clarify — always make your best guess at what they want and answer it.
+- Only answer about Kiez Burn {EVENT_YEAR}. If information clearly belongs to a past year, say so and note you only have {EVENT_YEAR} data."""
 
-ANSWER_SYSTEM_BASE = """You are Kiezthropic, a helpful assistant for Kiez Burn — a Burning Man-inspired community event near Berlin.
+ANSWER_SYSTEM_BASE = f"""You are Kiezthropic, a helpful assistant for Kiez Burn {EVENT_YEAR} — a Burning Man-inspired community event near Berlin.
 Answer questions using the provided wiki context. Be friendly, direct, and concise. Do not use emojis.
 When listing camps or installations, provide a complete list — do not truncate or summarize.
 If the question is vague, give a useful overview of Kiez Burn rather than asking for clarification.
-If the context doesn't cover the question, say so briefly and suggest what to ask instead."""
+If the context doesn't cover the question, say so briefly and suggest what to ask instead.
+Only answer about Kiez Burn {EVENT_YEAR} — do not reference past years unless explicitly asked."""
 
 
 def _build_answer_system() -> str:
@@ -301,7 +304,7 @@ def _msg_to_dict(m) -> dict:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", event_year=EVENT_YEAR)
 
 
 @app.route("/chat", methods=["POST"])

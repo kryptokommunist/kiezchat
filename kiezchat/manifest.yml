@@ -11,3 +11,4 @@ applications:
     env:
       AICORE_DEPLOYMENT_ID: d34c832f51430c83
       AICORE_RESOURCE_GROUP: default
+      EVENT_YEAR: "2026"
