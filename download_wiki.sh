@@ -38,6 +38,7 @@ for doc in data['data']:
     # Sanitize filename
     SAFE_TITLE=$(echo "$DOC_TITLE" | tr '/:*?"<>|\\' '_' | tr -s ' ' '_' | cut -c1-100)
     FILENAME="$OUTPUT_DIR/${SAFE_TITLE:-untitled}_${DOC_ID:0:8}.md"
+    WIKI_URL="https://wiki.kiezburn.org/doc/${DOC_ID}"
 
     echo "  Downloading: $DOC_TITLE"
     curl -s "$BASE_URL/documents.export" -X POST \
@@ -48,6 +49,7 @@ for doc in data['data']:
 import json, sys
 data = json.load(sys.stdin)
 if data.get('ok'):
+    print('<!-- wiki_url: $WIKI_URL -->')
     print(data['data'])
 else:
     print('ERROR: ' + str(data))

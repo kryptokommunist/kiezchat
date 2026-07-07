@@ -120,6 +120,9 @@ def chunk_telegram(text: str, title: str, source: str) -> list[dict]:
     return chunks
 
 
+WIKI_URL_RE = re.compile(r"<!--\s*wiki_url:\s*(https?://\S+)\s*-->")
+
+
 def build_and_save():
     chunks = []
     for wiki_dir in ["wiki_pages", "wiki_pages_extra"]:
@@ -130,11 +133,18 @@ def build_and_save():
             content = md_file.read_text(encoding="utf-8", errors="ignore")
             title = re.sub(r"_[a-f0-9]{8}$", "", md_file.stem).replace("_", " ")
 
+            url_match = WIKI_URL_RE.search(content)
+            wiki_url = url_match.group(1) if url_match else None
+
             if md_file.name.startswith("telegram_"):
                 file_chunks = chunk_telegram(content, title, md_file.name)
             else:
                 content = preprocess(content)
                 file_chunks = chunk_text(content, title, md_file.name)
+
+            if wiki_url:
+                for c in file_chunks:
+                    c["url"] = wiki_url
 
             chunks.extend(file_chunks)
 

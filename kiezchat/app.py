@@ -267,7 +267,7 @@ If the question is vague, give a useful overview of Kiez Burn rather than asking
 If the context doesn't cover the question, say so briefly and suggest what to ask instead.
 Only answer about Kiez Burn {EVENT_YEAR} — do not reference past years unless explicitly asked.
 Never invent or guess URLs. If you don't have a real URL from the context, do not include a link at all.
-When multiple sources were used, end your answer with a brief "Sources: [title1], [title2]" line."""
+When multiple sources were used, end your answer with a "Sources:" line listing them. Use the markdown link format [title](url) if a URL is provided for that source, otherwise just the title."""
 
 
 def _build_answer_system() -> str:
@@ -401,7 +401,7 @@ def chat():
 
             # --- build final context ---
             context_parts = []
-            sources_used: list[str] = []
+            sources_used: list[tuple[str, str | None]] = []  # (title, url)
             if collected_ids:
                 full_chunks = rag.get_chunks_by_ids(list(collected_ids))
                 if any("camps_list" in c.get("source", "") for c in full_chunks):
@@ -415,7 +415,7 @@ def chat():
                     t = c["title"]
                     if t not in seen_titles:
                         seen_titles.add(t)
-                        sources_used.append(t)
+                        sources_used.append((t, c.get("url")))
 
             full_context_block = (
                 "Full text for selected chunks:\n\n" + "\n\n---\n\n".join(context_parts) + "\n\n"
@@ -430,7 +430,11 @@ def chat():
 
             sources_block = ""
             if len(sources_used) > 1:
-                sources_block = "Sources used: " + ", ".join(sources_used) + "\n\n"
+                def _fmt_source(title: str, url: str | None) -> str:
+                    return f"[{title}]({url})" if url else title
+                sources_block = "Sources used: " + ", ".join(
+                    _fmt_source(t, u) for t, u in sources_used
+                ) + "\n\n"
 
             final_messages = [
                 {"role": "system", "content": _build_answer_system()},
