@@ -415,7 +415,7 @@
 
     // Open all links in new tab
     const renderer = new marked.Renderer();
-    renderer.link = (href, title, text) => {
+    renderer.link = ({ href, title, text }) => {
       const t = title ? ` title="${title}"` : '';
       return `<a href="${href}"${t} target="_blank" rel="noopener">${text}</a>`;
     };
