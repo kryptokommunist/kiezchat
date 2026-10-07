@@ -316,6 +316,30 @@ def _msg_to_dict(m) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Access gate — the app is only reachable with ?code=<ACCESS_CODE>.
+# Once provided, the code is stored in a cookie so the query string isn't
+# needed on every request. The admin area has its own password auth.
+# ---------------------------------------------------------------------------
+
+ACCESS_CODE = os.environ.get("ACCESS_CODE", "kiezburnAIFTW2060")
+
+
+@app.before_request
+def _require_access_code():
+    # Admin routes have their own password auth; public stats are harmless.
+    if request.path.startswith("/admin") or request.path == "/stats.json":
+        return None
+    if request.cookies.get("access_code") == ACCESS_CODE:
+        return None
+    if request.args.get("code") == ACCESS_CODE:
+        # Redirect to the same path without the code, setting the cookie.
+        resp = Response("", status=302, headers={"Location": request.path})
+        resp.set_cookie("access_code", ACCESS_CODE, httponly=True, samesite="Lax")
+        return resp
+    return Response("Access denied. A valid access code is required.", status=403)
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
