@@ -73,6 +73,8 @@ Copy `.settings.example` to `.settings` (gitignored) and fill in your values:
 WIKI_API_TOKEN=<your Outline API token>
 WIKI_BASE_URL=https://wiki.kiezburn.org/api
 WIKI_COLLECTION_ID_2026=<collection UUID>
+TELEGRAM_API_ID=<your Telegram app api_id from my.telegram.org>
+TELEGRAM_API_HASH=<your Telegram app api_hash from my.telegram.org>
 ```
 
 For local development, also export AI Core credentials:
@@ -93,6 +95,8 @@ export AICORE_API_URL=...
 This downloads all wiki pages from Outline into `wiki_pages/`. Copy or symlink them into `kiezchat/wiki_pages/`.
 
 ### 3. Obtain Telegram chat logs (optional)
+
+Requires `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` in `.settings` (from https://my.telegram.org).
 
 Authenticate once (creates a session file):
 

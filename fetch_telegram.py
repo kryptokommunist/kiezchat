@@ -11,13 +11,15 @@ Session file must exist at ../telegram-autocalendar/session/telegram_session
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+# Credentials come from the environment (loaded from .settings). Never hardcode them.
 API_ID = int(os.environ["TELEGRAM_API_ID"])
-API_HASH = "REDACTED_TELEGRAM_API_HASH"
+API_HASH = os.environ["TELEGRAM_API_HASH"]
 SESSION_PATH = str(Path(__file__).parent / "telegram-autocalendar" / "session" / "telegram_session")
 OUT_DIR = Path(__file__).parent / "kiezchat" / "wiki_pages_extra"
 

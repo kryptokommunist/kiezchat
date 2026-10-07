@@ -5,11 +5,13 @@ Run this ONCE interactively, then fetch_telegram.py will work without auth.
 Usage: python3 telegram_auth.py
 """
 import asyncio
+import os
 import sys
 from pathlib import Path
 
+# Credentials come from the environment (loaded from .settings). Never hardcode them.
 API_ID = int(os.environ["TELEGRAM_API_ID"])
-API_HASH = "REDACTED_TELEGRAM_API_HASH"
+API_HASH = os.environ["TELEGRAM_API_HASH"]
 SESSION_DIR = Path(__file__).parent / "telegram-autocalendar" / "session"
 SESSION_PATH = str(SESSION_DIR / "telegram_session")
 
